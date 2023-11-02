@@ -43,16 +43,52 @@ import (
 )
 
 var log = golog.Get("")
-var release string = "0.1"
+var release string = "0.2"
 var includedExts map[string]interface{}
 var excludedExts map[string]interface{}
 var nameRegexp *regexp.Regexp
 var fileSizeThreshold uint64
+var fileSizeLimit uint64
 var downloadDir, inventoryFile string
 var download bool
 
 var hashRegexp *regexp.Regexp
 var sizeRegexp *regexp.Regexp
+
+const (
+	KiB = 1024
+	MiB = KiB * 1024
+	GiB = MiB * 1024
+)
+
+type downloadProgress struct {
+	fileSize int
+	fd       *os.File
+	ctr      int
+}
+
+func (self *downloadProgress) Write(b []byte) (int, error) {
+	self.ctr += len(b)
+	percent := (self.ctr / self.fileSize) * 100
+	fmt.Printf("\rDownloaded %d%% (%d/%d) bytes", percent, self.ctr, self.fileSize)
+    //if percent == 100 {
+    //    fmt.Println()
+    //}
+	return self.fd.Write(b)
+}
+
+func formatSize(size int64) string {
+	switch {
+	case size >= GiB:
+		return fmt.Sprintf("%.2f GiB", float64(size)/float64(GiB))
+	case size >= MiB:
+		return fmt.Sprintf("%.2f MiB", float64(size)/float64(MiB))
+	case size >= KiB:
+		return fmt.Sprintf("%.2f KiB", float64(size)/float64(KiB))
+	default:
+		return fmt.Sprintf("%d bytes", size)
+	}
+}
 
 func isFlagSet(name string) bool {
 	found := false
@@ -136,7 +172,12 @@ func downloadFile(session *smb.Connection, file string, skipFilters bool) {
 		// Filter based on file size
 		if size < int(fileSizeThreshold) {
 			// Skip
-			log.Debugf("Skipping download of file with name: %s and size: %d due to below specified min-size\n", filename, size)
+			log.Infof("Skipping download of file with name: %s and size: %d due to below specified min-size\n", filename, size)
+			return
+		}
+		if size > int(fileSizeLimit) {
+			// Skip
+			log.Infof("Skipping download of file with name: %s and size: %d due to above specified max-size\n", filename, size)
 			return
 		}
 	}
@@ -166,12 +207,18 @@ func downloadFile(session *smb.Connection, file string, skipFilters bool) {
 
 	// Call library function to retrieve the file
 	filepath := fmt.Sprintf("FileLib\\%s\\%s", hash[0:4], hash)
-	err = session.RetrieveFile(share, filepath, 0, f.Write)
+	// Show progress of file download
+	log.Noticef("Starting to download (%s) with size: %s\n", strings.TrimPrefix(localFilename, downloadDir+string(os.PathSeparator)), formatSize(int64(size)))
+	dp := downloadProgress{fileSize: size, fd: f}
+	err = session.RetrieveFile(share, filepath, 0, dp.Write)
+	//err = session.RetrieveFile(share, filepath, 0, f.Write)
 	if err != nil {
 		log.Errorln(err)
 		f.Close()
 		return
 	}
+    // Clear the progress outprint
+    fmt.Printf("\r%s\r", string(make([]byte, 80))) 
 	log.Noticef("Downloaded (%s)\n", strings.TrimPrefix(localFilename, downloadDir+string(os.PathSeparator)))
 	f.Close()
 	return
@@ -299,8 +346,10 @@ var helpMsg = `
           --exclude-exts        Comma-separated list of file extensions to exclude from the inventory enumeration and the download.
                                 Mutually exclusive with include-exts
           --min-size            Minimum file size to download in bytes
+          --max-size            Maximum file size to download in bytes
           --noenc               Disable smb encryption
           --smb2                Force smb 2.1
+          --verbose             Enable verbose logging
           --debug               Enable debug logging
       -v, --version             Show version
 `
@@ -308,7 +357,7 @@ var helpMsg = `
 func main() {
 	var host, username, password, hash, domain, shareFlag, includeName, includeExt, excludeExt, singleFile string
 	var port, dialTimeout int
-	var debug, noEnc, forceSMB2, localUser, nullSession, version bool
+	var debug, noEnc, forceSMB2, localUser, nullSession, version, verbose bool
 	var err error
 
 	flag.Usage = func() {
@@ -332,6 +381,7 @@ func main() {
 	flag.StringVar(&includeExt, "include-exts", "ini,xml,config", "")
 	flag.StringVar(&excludeExt, "exclude-exts", "", "")
 	flag.Uint64Var(&fileSizeThreshold, "min-size", 0, "")
+	flag.Uint64Var(&fileSizeLimit, "max-size", 0, "")
 	flag.StringVar(&inventoryFile, "inventory", "sccmfiles.txt", "")
 	flag.StringVar(&downloadDir, "download", "", "")
 	flag.StringVar(&singleFile, "single-file", "", "")
@@ -343,6 +393,7 @@ func main() {
 	flag.BoolVar(&nullSession, "n", false, "")
 	flag.BoolVar(&nullSession, "null", false, "")
 	flag.BoolVar(&version, "v", false, "")
+	flag.BoolVar(&verbose, "verbose", false, "")
 	flag.BoolVar(&version, "version", false, "")
 
 	flag.Parse()
@@ -352,6 +403,10 @@ func main() {
 		golog.Set("github.com/jfjallid/go-smb/gss", "gss", golog.LevelDebug, golog.LstdFlags|golog.Lshortfile, golog.DefaultOutput, golog.DefaultErrOutput)
 		log.SetFlags(golog.LstdFlags | golog.Lshortfile)
 		log.SetLogLevel(golog.LevelDebug)
+	} else if verbose {
+		log.SetLogLevel(golog.LevelInfo)
+		golog.Set("github.com/jfjallid/go-smb/smb", "smb", golog.LevelError, golog.LstdFlags|golog.Lshortfile, golog.DefaultOutput, golog.DefaultErrOutput)
+		golog.Set("github.com/jfjallid/go-smb/gss", "gss", golog.LevelError, golog.LstdFlags|golog.Lshortfile, golog.DefaultOutput, golog.DefaultErrOutput)
 	} else {
 		golog.Set("github.com/jfjallid/go-smb/smb", "smb", golog.LevelError, golog.LstdFlags|golog.Lshortfile, golog.DefaultOutput, golog.DefaultErrOutput)
 		golog.Set("github.com/jfjallid/go-smb/gss", "gss", golog.LevelError, golog.LstdFlags|golog.Lshortfile, golog.DefaultOutput, golog.DefaultErrOutput)
@@ -579,6 +634,10 @@ func main() {
 			}
 			if fileSizeThreshold > 0 {
 				log.Noticef("[+] Only downloading files with a size greater than %d bytes\n", fileSizeThreshold)
+			}
+
+			if fileSizeLimit > 0 {
+				log.Noticef("[+] Only downloading files with a size less than %d bytes\n", fileSizeLimit)
 			}
 
 			scanner := bufio.NewScanner(f)
