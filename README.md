@@ -33,8 +33,10 @@ options:
       --exclude-exts        Comma-separated list of file extensions to exclude from the inventory enumeration and the download.
                             Mutually exclusive with include-exts
       --min-size            Minimum file size to download in bytes
+      --max-size            Maximum file size to download in bytes
       --noenc               Disable smb encryption
       --smb2                Force smb 2.1
+      --verbose             Enable verbose logging
       --debug               Enable debug logging
   -v, --version             Show version
 ```
