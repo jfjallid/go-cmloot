@@ -69,11 +69,8 @@ type downloadProgress struct {
 
 func (self *downloadProgress) Write(b []byte) (int, error) {
 	self.ctr += len(b)
-	percent := (self.ctr / self.fileSize) * 100
+	percent := (self.ctr * 100) / self.fileSize
 	fmt.Printf("\rDownloaded %d%% (%d/%d) bytes", percent, self.ctr, self.fileSize)
-    //if percent == 100 {
-    //    fmt.Println()
-    //}
 	return self.fd.Write(b)
 }
 
@@ -163,7 +160,7 @@ func downloadFile(session *smb.Connection, file string, skipFilters bool) {
 	buf := bytes.NewBuffer([]byte{})
 	err := session.RetrieveFile(share, metafilepath+".INI", 0, buf.Write)
 	if err != nil {
-		log.Errorln(err)
+		log.Errorf("Failed to retrieve the INI file (%s). Likely permission denied\n", file)
 		return
 	}
 
@@ -175,7 +172,7 @@ func downloadFile(session *smb.Connection, file string, skipFilters bool) {
 			log.Infof("Skipping download of file with name: %s and size: %d due to below specified min-size\n", filename, size)
 			return
 		}
-		if size > int(fileSizeLimit) {
+		if (fileSizeLimit > 0) && (size > int(fileSizeLimit)) {
 			// Skip
 			log.Infof("Skipping download of file with name: %s and size: %d due to above specified max-size\n", filename, size)
 			return
@@ -217,8 +214,8 @@ func downloadFile(session *smb.Connection, file string, skipFilters bool) {
 		f.Close()
 		return
 	}
-    // Clear the progress outprint
-    fmt.Printf("\r%s\r", string(make([]byte, 80))) 
+	// Clear the progress outprint
+	fmt.Printf("\r%s\r", string(make([]byte, 80)))
 	log.Noticef("Downloaded (%s)\n", strings.TrimPrefix(localFilename, downloadDir+string(os.PathSeparator)))
 	f.Close()
 	return
@@ -310,6 +307,7 @@ func buildInventory(session *smb.Connection, share string, callback func(path st
 				return err
 			}
 			numFiles += 1
+			fmt.Printf("\r%s\r", string(make([]byte, 80)))
 			fmt.Printf("\rCollecting INI files in (%s), %d thus far, in folder (%d/%d) ", folder.FullPath, numFiles, i, numFolders)
 			return nil
 		})
