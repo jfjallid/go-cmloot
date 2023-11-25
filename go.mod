@@ -3,8 +3,8 @@ module github.com/jfjallid/go-cmloot
 go 1.19
 
 require (
-	github.com/jfjallid/go-smb v0.2.3
-	github.com/jfjallid/golog v0.3.2
+	github.com/jfjallid/go-smb v0.2.6
+	github.com/jfjallid/golog v0.3.3
 	golang.org/x/term v0.5.0
 )
 

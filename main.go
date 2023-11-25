@@ -56,9 +56,10 @@ var hashRegexp *regexp.Regexp
 var sizeRegexp *regexp.Regexp
 
 const (
-	KiB = 1024
-	MiB = KiB * 1024
-	GiB = MiB * 1024
+	KiB                 = 1024
+	MiB                 = KiB * 1024
+	GiB                 = MiB * 1024
+	inventoryBufferSize = 1000 // Write every n rows to disk when building the inventory
 )
 
 type downloadProgress struct {
@@ -114,6 +115,44 @@ func parseINIFile(data []byte) (hash string, size int, err error) {
 	}
 	size, err = strconv.Atoi(string(matches[1]))
 	return
+}
+
+func writeInventoryLinesToFile(f *os.File, names <-chan string) error {
+	writer := bufio.NewWriter(f)
+	buffer := make([]string, 0, inventoryBufferSize)
+
+	for name := range names {
+		buffer = append(buffer, name)
+
+		if len(buffer) >= inventoryBufferSize {
+			if err := flushLineBuffer(writer, &buffer); err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(buffer) > 0 {
+		if err := flushLineBuffer(writer, &buffer); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func flushLineBuffer(writer *bufio.Writer, buffer *[]string) error {
+	for _, line := range *buffer {
+		if _, err := writer.WriteString(line); err != nil {
+			return err
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	*buffer = (*buffer)[:0]
+	return nil
 }
 
 func downloadFile(session *smb.Connection, file string, skipFilters bool) {
@@ -432,9 +471,12 @@ func main() {
 			flag.Usage()
 			return
 		}
+	} else if singleFile != "" {
+		// Allow single-file download without specifying a download dir
+		download = true
+		downloadDir = "."
 	} else if inventoryFile == "" {
-		// Should it be supported to specify --single-file without a download dir?
-		log.Errorln("--inventory <index file> cannot be empty")
+		log.Errorln("--inventory <index file> cannot be empty without specifying --single-file <path>")
 		flag.Usage()
 		return
 	}
@@ -586,24 +628,28 @@ func main() {
 		defer f.Close()
 
 		log.Noticeln("[+] Building inventory file")
+		inventoryLineChan := make(chan string)
+		go func() {
+			err := writeInventoryLinesToFile(f, inventoryLineChan)
+			if err != nil {
+				log.Errorf("Failed to write to inventory file with error: %s\n", err)
+				// Perhaps something less drastic?
+				os.Exit(1)
+			}
+		}()
 
-		filenames := make([]string, 0)
 		// Build the index
 		err = buildInventory(session, shareFlag, func(path string) error {
 			name := fmt.Sprintf("\\\\%s\\%s\\%s\n", host, shareFlag, strings.TrimSuffix(path, ".INI"))
-			filenames = append(filenames, name)
+			inventoryLineChan <- name
 			return nil
 		})
-		//fmt.Println()
 
 		if err != nil {
 			log.Errorln(err)
 			return
 		}
 
-		for _, path := range filenames {
-			f.WriteString(path)
-		}
 		log.Noticef("[+] Inventory written to file %s\n", inventoryFile)
 	} else {
 		// Create download directory
