@@ -19,12 +19,20 @@ options:
   -d, --domain              Domain name to use for login
   -u, --user                Username
   -p, --pass                Password
+  -n, --no-pass             Disable password prompt and send no credentials
       --hash                Hex encoded NT Hash for user password
       --local               Authenticate as a local user instead of domain user
-  -n, --null	            Attempt null session authentication
+      --null	            Attempt null session authentication
       --inventory           File to store (or read from) all indexed filepaths (default sccmfiles.txt)
       --download <outdir>   Downloads all the files referenced by the inventory file to the <outdir>
       --single-file <path>  Download a single file with a specified path to the DataLib formatted as in the inventory file
+      --relay               Start an SMB listener that will relay incoming
+                            NTLM authentications to the remote server and
+                            use that connection. NOTE that this forces SMB 2.1
+                            without encryption.
+      --relay-port <port>   Listening port for relay (default 445)
+      --socks-host <target> Establish connection via a SOCKS5 proxy server
+      --socks-port <port>   SOCKS5 proxy port (default 1080)
   -t, --timeout             Dial timeout in seconds (default 5)
       --share               Name of share to connect to (default SCCMContentLib$)
       --include-name        Regular expression filter for files from the inventory to download
