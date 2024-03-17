@@ -44,7 +44,7 @@ import (
 )
 
 var log = golog.Get("")
-var release string = "0.3.0"
+var release string = "0.3.1"
 var includedExts map[string]interface{}
 var excludedExts map[string]interface{}
 var nameRegexp *regexp.Regexp
@@ -647,13 +647,13 @@ func main() {
 
 	defer session.Close()
 
-	if session.IsSigningRequired.Load() {
+	if session.IsSigningRequired() {
 		log.Noticeln("[-] Signing is required")
 	} else {
 		log.Noticeln("[+] Signing is NOT required")
 	}
 
-	if session.IsAuthenticated {
+	if session.IsAuthenticated() {
 		log.Noticef("[+] Login successful as %s\n", session.GetAuthUsername())
 	} else {
 		log.Noticeln("[-] Login failed")
