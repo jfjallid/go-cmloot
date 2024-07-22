@@ -14,7 +14,7 @@ SCCMContentLib$ share.
 Usage: ./go-cmloot [options]
 
 options:
-      --host                Hostname or ip address of remote server
+      --host                Hostname or ip address of remote server. Must be hostname when using Kerberos
   -P, --port                SMB Port (default 445)
   -d, --domain              Domain name to use for login
   -u, --user                Username
@@ -23,6 +23,10 @@ options:
       --hash                Hex encoded NT Hash for user password
       --local               Authenticate as a local user instead of domain user
       --null	            Attempt null session authentication
+  -k, --kerberos            Use Kerberos authentication. (KRB5CCNAME will be checked on Linux)
+      --dc-ip               Optionally specify ip of KDC when using Kerberos authentication
+      --target-ip           Optionally specify ip of target when using Kerberos authentication
+      --aes-key             Use a hex encoded AES128/256 key for Kerberos authentication
       --inventory           File to store (or read from) all indexed filepaths (default sccmfiles.txt)
       --download <outdir>   Downloads all the files referenced by the inventory file to the <outdir>
       --single-file <path>  Download a single file with a specified path to the DataLib formatted as in the inventory file
