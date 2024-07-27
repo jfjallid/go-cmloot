@@ -45,7 +45,7 @@ import (
 )
 
 var log = golog.Get("")
-var release string = "0.4.0"
+var release string = "0.4.1"
 var includedExts map[string]interface{}
 var excludedExts map[string]interface{}
 var nameRegexp *regexp.Regexp
